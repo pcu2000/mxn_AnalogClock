@@ -46,6 +46,8 @@ const int PWM_CHANNEL_LED = 0;
 const int PWM_CHANNEL_BACKLIGHT = 1;
 const int PWM_FREQ = 5000;
 const int PWM_RESOLUTION = 8;
+int brightnessTFT = 20;
+int brightnessLED = 20;
 
 /*Time definition*/
 ESP32Time rtc(0);
@@ -55,9 +57,10 @@ int oldMinute = -1;
 void showTurningPoint(int speed);
 void showActualTime();
 void printTime();
+void setBrightness(int bTFT, int bLED);
 
 void setup() {
-  /*Init shift register for LED's*/
+  /*Init shift register für die ansteuerung der LED's*/
   pinMode(PIN_DO_LED_Data, OUTPUT);
   digitalWrite(PIN_DO_LED_Data, LOW);
   pinMode(PIN_DO_LED_Clk, OUTPUT);
@@ -65,12 +68,13 @@ void setup() {
   pinMode(PIN_DO_LED_Clear, OUTPUT);
   digitalWrite(PIN_DO_LED_Clear, HIGH);
   
-  /**TODO LED mit ESP32 PWM Funktion funktioniert noch nicht deshalb momentan mit AnalogWrite**/
-  pinMode(PIN_PWM_LED_Pwm, OUTPUT);
-  analogWrite(PIN_PWM_LED_Pwm, 10);
-  //ledcSetup(PWM_CHANNEL_LED, PWM_FREQ, PWM_RESOLUTION);
-  //ledcAttachPin(PIN_PWM_LED_Pwm, PWM_CHANNEL_LED);
-  //ledcWrite(PIN_PWM_LED_Pwm, 255);
+  /*Init der PWM Signale für Helligkeit LED's und Display */
+  ledcSetup(PWM_CHANNEL_BACKLIGHT, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(PIN_PWM_TFT_Blight, PWM_CHANNEL_BACKLIGHT);
+  ledcWrite(PWM_CHANNEL_BACKLIGHT, 255);
+  ledcSetup(PWM_CHANNEL_LED, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(PIN_PWM_LED_Pwm, PWM_CHANNEL_LED);
+  ledcWrite(PWM_CHANNEL_LED, 255);
 
   /*Serial(USB) for debug*/
   Serial.begin(115200);
@@ -116,8 +120,17 @@ void loop() {
   int actMinute = rtc.getMinute();
   if(oldSecond != actSecond){
     oldSecond = actSecond;
+    setBrightness(20, 30);
     showActualTime();
-    if((actSecond % 2) == 1){pcf8574.digitalWrite(P0, HIGH);}else{pcf8574.digitalWrite(P0, LOW);}
+    if((actSecond % 2) == 1){
+      pcf8574.digitalWrite(P0, HIGH);
+      //ledcWrite(PWM_CHANNEL_BACKLIGHT, 255);
+      //ledcWrite(PWM_CHANNEL_LED, 255);
+    }else{
+      pcf8574.digitalWrite(P0, LOW);
+      //ledcWrite(PWM_CHANNEL_BACKLIGHT, 10);
+      //ledcWrite(PWM_CHANNEL_LED, 10);
+    }
   }
   if(oldMinute != actMinute){
     oldMinute = actMinute;
@@ -198,4 +211,10 @@ void printTime(){
   tft.print(timeString);
   tft.setCursor(2,90);
   tft.print(dateString);
+}
+
+
+void setBrightness(int bTFT, int bLED){
+  ledcWrite(PWM_CHANNEL_BACKLIGHT, bTFT);
+  ledcWrite(PWM_CHANNEL_LED, bLED);
 }
