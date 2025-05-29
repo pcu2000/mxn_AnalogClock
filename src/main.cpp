@@ -35,11 +35,17 @@ const int greenArray = 0;
 
 /*Button*/
 #define BUTTON_MENU 4
-#define BUTTON_ENTER 5
+#define BUTTON_BELL 5
 #define BUTTON_UP 6
 #define BUTTON_DOWN 7
 #define PRESSED false
 #define RELEASED true
+
+/*Button LED's*/
+#define BUTTON_LED_MENU 0
+#define BUTTON_LED_BELL 1
+#define BUTTON_LED_PLUS 2
+#define BUTTON_LED_MINUS 3
 
 /*I2C*/
 #define PIN_I2C_SDA 5
@@ -58,6 +64,13 @@ ESP32Time rtc(0);   // ESP Zeit
 rtcc_time timeIntern; // Echtseituhr Zeit
 rtcc_time timeInternFailDown; // Echtseituhr Zeit
 rtcc_time timeInternFailUp; // Echtseituhr Zeit
+rtcc_time timeInternAlarm1; // Echtseituhr Zeit
+bool pwrOutage = false;
+bool setTimeOK = false;
+uint alarmSetMin = 0;
+uint alarmSetHr = 7;
+bool alarmIsActive = false;
+bool alarmOn = false;
 
 /*Display*/
 #define PIN_DO_TFT_Reset -1 //Reset wird nicht umbedingt benötigt deshalb wird dieser Pin für TFT_DC verwendet
@@ -85,7 +98,19 @@ int brightnessLED = 20;
 #define STATE_TIMESETDAY 53
 #define STATE_TIMESETMONTH 54
 #define STATE_TIMESETYEAR 55
+#define STATE_ALARMSETMIN 60
+#define STATE_ALARMSETHR 61
+#define STATE_SETBRIGHTNESS 80
+
+#define SETTING_CHAPTER_TIME 0
+#define SETTING_CHAPTER_ALARMTIME 1
+#define SETTING_CHAPTER_DISPLAYBRIGHTNESS 2
+#define SETTING_CHAPTER_REFRESHRATE 3
+#define SETTING_CHAPTER_EXIT 4
+
 int state = STATE_NOTIMESET;
+int settingChapter = SETTING_CHAPTER_TIME;
+int oldSettingChapter = -1;
 bool secondChanged = true;
 bool minuteChanged = true;
 bool hourChanged = true;
@@ -97,9 +122,14 @@ void showTurningPoint(int speed);
 void showActualTime();
 void printTime();
 void printDate();
+void printAlarmTime();
+void printSetting(int pointPlace);
 void printTimeWarning();
+void printTimeOutage();
 void printTempHum(float temperatutre, float humidity, uint16_t bgcolor);
 //void calculateBrightness(uint8_t *calculatetDimmingValue);
+void setButtonLeds();
+void setButtonLeds(bool lMenu, bool lBell, bool lPlus, bool lMinus);
 void setBrightness(float dimmingValue);
 void showBrightness(int brightness);
 
@@ -135,20 +165,27 @@ void setup() {
   /*Init Portexpander*/
   pcf8574.write8(0xFF); //Alle Pins auf High setzen.
   pcf8574.setButtonMask(0b11110000);
+  setButtonLeds(1,1,1,1);
 
   /*Init Lichtsensor*/
   veml.begin();
 
   /*Init Echtzeituhr*/
-  rtc_ext.SetAlarm1Enabled(false);
-  rtc_ext.SetAlarm2Enabled(false);
+  pwrOutage = rtc_ext.HasPowerFailed(&timeInternFailDown, &timeInternFailUp);
+
+  rtc_ext.SetOscillatorEnabled(true);
+  rtc_ext.SetExternalOscillatorEnabled(false);
   rtc_ext.SetSquareWaveOutputState(false);
   rtc_ext.SetGPOState(false);
-  rtc_ext.SetOscillatorEnabled(true);
   rtc_ext.SetBatteryEnabled(true);
   rtc_ext.Set24HourTimeEnabled(true);
-  rtc_ext.HasPowerFailed(&timeInternFailDown, &timeInternFailUp);
-  rtc_ext.ClearPowerFailedFlag();
+  rtc_ext.SetAlarm1Enabled(false);
+  rtc_ext.ClearAlarm1Flag();
+  rtc_ext.SetAlarm2Enabled(false);
+  rtc_ext.ClearAlarm2Flag();
+
+  
+  setButtonLeds(1,1,1,0);
 
   /*Init Display*/
   tft.init(135, 240);   //Init ST7789 240x135px
@@ -163,9 +200,11 @@ void setup() {
   tft.setTextColor(ST77XX_WHITE, ST77XX_GREEN);
   tft.setCursor(50,70);
   tft.print("Berufsbildung");
+  setButtonLeds(1,1,0,0);
 
   delay(500);
   rtc_ext.SetGPOState(true);
+  setButtonLeds(1,0,0,0);
 
   delay(1500);
 
@@ -174,11 +213,17 @@ void setup() {
   rtc_ext.ReadTime(&timeIntern);
   exttimeToEsptime();
   exttimePrintToSerial();
+  //if(pwrOutage){
+    //rtc_ext.ClearPowerFailedFlag();
+    printTimeOutage();
+  //}
   
   showTurningPoint(10);
   tft.fillScreen(ST77XX_BLACK);
   printTime();
   printDate();
+  printTempHum(0.0, 0.0, ST77XX_BLACK);
+  setButtonLeds(0,0,0,0);
 
 }
 
@@ -186,15 +231,15 @@ void loop() {
   static int oldSecond = -1;
   static int oldMinute = -1;
   static int settingCounter = 0;
-  static bool knobPressed = false;
   static bool knobSettingPressed = false;
+  static bool knobPressed = false;
   static float sensorValueTemperature = 0.0;
   static float sensorValueHuminity = 0.0;
   static float sensorValueBrightness= 0.0;
   static uint8_t brightnessDimmingValue;
   int actSecond = rtc.getSecond();
   int actMinute = rtc.getMinute();
-  int SetingWaitCounter = 0;
+  int SettingWaitCounter = 0;
   long newTime = 0 ;
   uint8_t inputValues = 0;
   if(oldSecond != actSecond){
@@ -214,25 +259,25 @@ void loop() {
         DHT.read();
         sensorValueTemperature = DHT.getTemperature();
         sensorValueHuminity = DHT.getHumidity();
-        Serial.print(sensorValueTemperature);
+        /*Serial.print(sensorValueTemperature);
         Serial.print(" ; ");
         Serial.print(sensorValueHuminity);
         Serial.print(" ; ");
         Serial.print(sensorValueBrightness);
         Serial.println(" ; ");
-        exttimePrintToSerial();
+        exttimePrintToSerial();*/
   }
 
   //Check encoderknob is pressed for settings
-  //if(pcf8574.digitalRead(BUTTON_UP) == PRESSED && knobPressed == false){
-  if(pcf8574.readButton(BUTTON_UP) == PRESSED && knobSettingPressed == false){
-    knobSettingPressed = true;
+  //if(pcf8574.digitalRead(BUTTON_UP) == PRESSED && knobSettingPressed == false){
+  if(pcf8574.readButton(BUTTON_UP) == PRESSED && knobPressed == false){
+    knobPressed = true;
     settingCounter++;
     Serial.print("UP_pressed Value: ");
     Serial.println(settingCounter);
   }
-  if(pcf8574.readButton(BUTTON_DOWN) == PRESSED && knobSettingPressed == false){
-    knobSettingPressed = true;
+  if(pcf8574.readButton(BUTTON_DOWN) == PRESSED && knobPressed == false){
+    knobPressed = true;
     settingCounter--;
     Serial.print("UP_pressed Value: ");
     Serial.println(settingCounter);
@@ -241,31 +286,48 @@ void loop() {
 
   //delay(10);
   while (pcf8574.readButton(BUTTON_MENU) == PRESSED && state == STATE_TIMESET) { //state == STATE_TIMESET
-    SetingWaitCounter++;
-    if(SetingWaitCounter >= 100){
-      knobPressed = true;
+    SettingWaitCounter++;
+    if(SettingWaitCounter >= 100){
+      knobSettingPressed = true;
+      setButtonLeds();
       //alarmSetWaitCounter = 0;
-      //printSetting(0);
+      printSetting(0);
+      break;
     }
-    tft.fillRect(216,2,2,SetingWaitCounter,ST77XX_RED);
-    Serial.println(SetingWaitCounter);
+    tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_RED);
+    Serial.println(SettingWaitCounter);
     delay(20);
   }
+  //if(knobSettingPressed){
+    //tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
+  //}
   if(pcf8574.readButton(BUTTON_MENU) == PRESSED && state != STATE_TIMESET){
-    knobPressed = true;
+    knobSettingPressed = true;
+      setButtonLeds();
     delay(10);
   }
 //}
-
+  //delay(10);
+  while (pcf8574.readButton(BUTTON_BELL) == PRESSED && state == STATE_TIMESET && knobPressed == false) { //state == STATE_TIMESET
+    SettingWaitCounter++;
+    if(SettingWaitCounter >= 50){
+      knobPressed = true;
+      //alarmSetWaitCounter = 0;
+      alarmIsActive = !alarmIsActive;
+      setButtonLeds();
+      tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
+      printAlarmTime();
+      //printSetting(0);
+      break;
+    }
+    tft.fillRect(230,2,5,SettingWaitCounter*2,ST77XX_RED);
+    //Serial.println(SettingWaitCounter);
+    delay(20);
+  }
   
-  /*if(pcf8574.digitalRead(BUTTON_UP) == RELEASED && knobPressed == true){
-    knobPressed = false;
-    Serial.println("UPreleased");
-  }*/
 
   switch (state) {
     case STATE_NOTIMESET:
-      //if(secondChanged){printTime(state, bufSecond);} //TODO: anpassen auf Minuten Changed
       if(secondChanged){
         showActualTime(); 
 
@@ -275,7 +337,7 @@ void loop() {
           setBrightness(sensorValueBrightness);
           showBrightness(sensorValueBrightness / 10);
         }
-        if((actSecond % 5) == 0){
+        if((actSecond % 10) == 0){
           printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_BLACK);
         }
       }
@@ -283,10 +345,20 @@ void loop() {
       //if(dayChanged){printDate(state, bufSecond);}
       break;
     case STATE_TIMESET:
-      //if(secondChanged){printTime(state, bufSecond);} //TODO: anpassen auf Minuten Changed
+      //if(secondChanged){printTime(state, bufSecond);} //TODO: anpassen auf Minuten Changed alarmOn
       if(secondChanged){
         showActualTime();
-        setBrightness(sensorValueBrightness);
+        if(!alarmOn){
+          setBrightness(sensorValueBrightness);
+        }else{
+          if((actSecond % 2) == 1){
+            setBrightness(20.0);
+          }else{
+            setBrightness(100.0);
+          }
+        }
+        
+
         printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_WHITE);
         showBrightness(sensorValueBrightness / 10);
 
@@ -294,16 +366,12 @@ void loop() {
       if(minuteChanged){printTime();}
       break;
     case STATE_SETSETTINGMODE:
-      /*if(newPosition < 0){
-        encoder.setCount(6);
-        newPosition = 3;
-      }
-      if(timeSetOk){
-        settingChapter = newPosition % 5;
+      if(setTimeOK){
+        settingChapter = settingCounter % 5;
       }else{
         settingChapter = SETTING_CHAPTER_TIME;
       }
-      printSetting(settingChapter);*/
+      printSetting(settingChapter);
       break;
     case STATE_TIMESETMIN:
       newTime = rtc.getLocalEpoch() + (settingCounter * 60);
@@ -337,199 +405,186 @@ void loop() {
       printDate();
       //timeSetOk = true;
       break;
-    /*case STATE_ALARMSETMIN:
-      alarmSetMin = alarmSetMin + newPosition;
+    case STATE_ALARMSETMIN:
+      alarmSetMin = alarmSetMin + settingCounter;
       if(alarmSetMin >=60){
         alarmSetMin = 0;
       }else if(alarmSetMin < 0){
         alarmSetMin = 59;
       }
-      encoder.setCount(0);
-      printTime(state, bufSecond);
+      settingCounter = 0;
+      printTime();
       break;
     case STATE_ALARMSETHR:
-      alarmSetHr = alarmSetHr + newPosition;
+      alarmSetHr = alarmSetHr + settingCounter;
       if(alarmSetHr >=24){
         alarmSetHr = 0;
       }else if(alarmSetHr < 0){
         alarmSetHr = 23;
       }
-      encoder.setCount(0);
-      printTime(state, bufSecond);
+      settingCounter = 0;
+      printTime();
       break;
     case STATE_SETBRIGHTNESS:
-      displayBrightness = (newPosition % 9)*31+7;
-      setBackLight(displayBrightness, 1);
-      printBrightness();
-      break;*/
+      //displayBrightness = (newPosition % 9)*31+7;
+      //setBackLight(displayBrightness, 1);
+      //printBrightness();
+      Serial.println("Brightnesssetting");
+      break;
     default:
       // Statement(s)
       break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
   }
 
-   //Check encoderknob is pressed for settings
-  if(pcf8574.readButton(BUTTON_MENU) == PRESSED && knobPressed == false){
-    //if( knobPressed == false){
-    
-    Serial.println("pressed");
-    
-
-    delay(10);
-    /*while (pcf8574.readButton(BUTTON_MENU) == PRESSED && state == STATE_TIMESET) { //state == STATE_TIMESET
-      SetingWaitCounter++;
-      Serial.println("pressed");
-      if(SetingWaitCounter >= 10){
-        knobPressed = true;
-        settingCounter = 0;
+  //cange state for settings
+  if(knobSettingPressed == true){
+    //settingCounter = 0;
+    switch (state) {
+      case STATE_NOTIMESET:
+        state = STATE_SETSETTINGMODE;
+        break;
+      case STATE_TIMESET:
+        state = STATE_SETSETTINGMODE;
+        break;
+      case STATE_SETSETTINGMODE:
+        tft.fillScreen(ST77XX_YELLOW);
+        Serial.print("setting Chapter: ");
+        Serial.println(settingChapter);
+        switch (settingChapter) {
+          case SETTING_CHAPTER_TIME:
+            state = STATE_TIMESETMIN;        
+            printTime();
+            printDate();
+            break;
+          case SETTING_CHAPTER_ALARMTIME:
+            state = STATE_ALARMSETMIN;
+            break;
+          case SETTING_CHAPTER_DISPLAYBRIGHTNESS:
+            state = STATE_SETBRIGHTNESS;
+            break;
+          case SETTING_CHAPTER_EXIT:
+            if(setTimeOK == 0){
+              state = STATE_NOTIMESET;
+            }else{
+              state = STATE_TIMESET;
+            }
+            tft.fillScreen(ST77XX_WHITE);
+            printTime();
+            printDate();
+            //printAlarmTime();
+            break;
+          default:
+            // Statement(s)
+            break;
+        }
+        oldSettingChapter = -1;
         
-        Serial.println("pressedloop");
-        //alarmSetWaitCounter = 0;
-        //printSetting(0);
-      }
-      tft.fillRect(220,30,20,SetingWaitCounter,ST77XX_RED);
-      Serial.println(SetingWaitCounter);
-      delay(10);
+        //state = STATE_TIMESETMIN;
+        break;
+      case STATE_TIMESETMIN:
+        state = STATE_TIMESETHR;
+        break;
+      case STATE_TIMESETHR:
+        state = STATE_TIMESETDAY;
+        printTime();
+        break;
+      case STATE_TIMESETDAY:
+        state = STATE_TIMESETMONTH;
+        break;
+      case STATE_TIMESETMONTH:
+        state = STATE_TIMESETYEAR;
+        break;
+      case STATE_TIMESETYEAR:
+
+      
+      setButtonLeds(0,0,0,0);
+      Serial.print(rtc.getDay());
+      Serial.print(" - ");
+      Serial.print(rtc.getMonth());
+      Serial.print(" - ");
+      Serial.println(rtc.getYear());
+      
+        timeIntern.secone = rtc.getSecond() % 10;
+        timeIntern.secten = rtc.getSecond() / 10;
+        timeIntern.minone = rtc.getMinute() % 10;
+        timeIntern.minten = rtc.getMinute() / 10;
+        timeIntern.hrone = rtc.getHour(true) % 10;
+        timeIntern.hrten = rtc.getHour(true) / 10;
+        timeIntern.dateone = rtc.getDay() % 10;
+        timeIntern.dateten = rtc.getDay() / 10;
+        timeIntern.mthone = (rtc.getMonth() + 1) % 10;
+        timeIntern.mthten = (rtc.getMonth() + 1) / 10;
+        timeIntern.yrone = rtc.getYear()  % 10;
+        timeIntern.yrten = (rtc.getYear() - 2000) / 10;
+        rtc_ext.SetTime(&timeIntern);
+
+        state = STATE_TIMESET;
+        setButtonLeds(0,0,0,0);
+        setTimeOK = true;
+        tft.fillScreen(ST77XX_WHITE);
+        printTime();
+        printDate();
+        //printAlarmTime();
+        break;
+      case STATE_ALARMSETMIN:
+        state = STATE_ALARMSETHR;
+        break;
+      case STATE_ALARMSETHR:
+        alarmIsActive = 1;
+        setButtonLeds(0,1,0,0);
+        state = STATE_TIMESET;
+        tft.fillScreen(ST77XX_WHITE);
+        printTime();
+        printDate();
+        printAlarmTime();
+        break;
+      case STATE_SETBRIGHTNESS:
+        //newPosition = 0;
+        state = STATE_TIMESET;
+        tft.fillScreen(ST77XX_WHITE);
+        printTime();
+        printDate();
+        printAlarmTime();
+        break;
+      default:
+        state = STATE_NOTIMESET;
+        break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
+        
     }
-    if(pcf8574.readButton(BUTTON_MENU) == PRESSED && state != STATE_TIMESET){
-      knobPressed = true;
-      settingCounter = 0;
-      delay(10);
-    }*/
+    delay(10);
   }
+  delay(10);
   
-  //tft.fillRect(220,30,20,100,ST77XX_BLACK);
+  //inputValues = pcf8574.read8();
+  //if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobSettingPressed == true  && state != STATE_SETSETTINGMODE){
+  if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobSettingPressed == true){
+    tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
+    knobSettingPressed = false;
+    Serial.println("released");
+  }
+  //}
+  if(pcf8574.readButton(BUTTON_BELL) == RELEASED && pcf8574.readButton(BUTTON_UP) == RELEASED && pcf8574.readButton(BUTTON_DOWN) == RELEASED && knobPressed == true){
+    tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
+    knobPressed = false;
+    Serial.println("released");
+  }
+  //}
+//Serial.println(state);
 
-    //cange state for settings
-    if(knobPressed == true){
-      //settingCounter = 0;
-      switch (state) {
-        case STATE_NOTIMESET:
-          state = STATE_SETSETTINGMODE;
-          break;
-        case STATE_TIMESET:
-          state = STATE_SETSETTINGMODE;
-          break;
-        case STATE_SETSETTINGMODE:
-          tft.fillScreen(ST77XX_YELLOW);
-          /*switch (settingChapter) {
-            case SETTING_CHAPTER_TIME:*/
-              state = STATE_TIMESETMIN;        
-              printTime();
-              printDate();
-              /*break;
-            case SETTING_CHAPTER_ALARMTIME:
-              state = STATE_ALARMSETMIN;
-              break;
-            case SETTING_CHAPTER_DISPLAYBRIGHTNESS:
-              state = STATE_SETBRIGHTNESS;
-              break;
-            case SETTING_CHAPTER_EXIT:
-              if(timeSetOk == 0){
-                state = STATE_NOTIMESET;
-              }else{
-                state = STATE_TIMESET;
-              }
-              tft.fillScreen(ST77XX_WHITE);
-              printTime(state, bufSecond);
-              printDate(state, bufSecond);
-              printAlarmTime();
-              break;
-            default:
-              // Statement(s)
-              break;
-          }
-          oldSettingChapter = -1;*/
-          
-          state = STATE_TIMESETMIN;
-          break;
-        case STATE_TIMESETMIN:
-          state = STATE_TIMESETHR;
-          break;
-        case STATE_TIMESETHR:
-          state = STATE_TIMESETDAY;
-          printTime();
-          break;
-        case STATE_TIMESETDAY:
-          state = STATE_TIMESETMONTH;
-          break;
-        case STATE_TIMESETMONTH:
-          state = STATE_TIMESETYEAR;
-          break;
-        case STATE_TIMESETYEAR:
+  //Check is time for alarm and alarm activated
+  if(alarmSetMin == rtc.getMinute() && alarmSetHr == rtc.getHour(true) && alarmIsActive && state == STATE_TIMESET){
+    alarmOn = true;
+    rtc_ext.SetGPOState(false);
+    Serial.println("Alarm Start");
+    alarmIsActive = 0;
+  }
 
-        
-        Serial.print(rtc.getDay());
-        Serial.print(" - ");
-        Serial.print(rtc.getMonth());
-        Serial.print(" - ");
-        Serial.println(rtc.getYear());
-        
-          timeIntern.secone = rtc.getSecond() % 10;
-          timeIntern.secten = rtc.getSecond() / 10;
-          timeIntern.minone = rtc.getMinute() % 10;
-          timeIntern.minten = rtc.getMinute() / 10;
-          timeIntern.hrone = rtc.getHour(true) % 10;
-          timeIntern.hrten = rtc.getHour(true) / 10;
-          timeIntern.dateone = rtc.getDay() % 10;
-          timeIntern.dateten = rtc.getDay() / 10;
-          timeIntern.mthone = (rtc.getMonth() + 1) % 10;
-          timeIntern.mthten = (rtc.getMonth() + 1) / 10;
-          timeIntern.yrone = rtc.getYear()  % 10;
-          timeIntern.yrten = (rtc.getYear() - 2000) / 10;
-          
-          //timeIntern.minone = 5;
-          //timeIntern.minten = 2;
-          rtc_ext.SetTime(&timeIntern);
-
-          state = STATE_TIMESET;
-          tft.fillScreen(ST77XX_WHITE);
-          printTime();
-          printDate();
-          //printAlarmTime();
-          break;
-        /*case STATE_ALARMSETMIN:
-          state = STATE_ALARMSETHR;
-          break;
-        case STATE_ALARMSETHR:
-          state = STATE_TIMESET;
-          tft.fillScreen(ST77XX_WHITE);
-          printTime(state, bufSecond);
-          printDate(state, bufSecond);
-          printAlarmTime();
-          break;
-        case STATE_SETBRIGHTNESS:
-          newPosition = 0;
-          if(timeSetOk == 0){
-            state = STATE_NOTIMESET;
-          }else{
-            state = STATE_TIMESET;
-          }
-          tft.fillScreen(ST77XX_WHITE);
-          printTime(state, bufSecond);
-          printDate(state, bufSecond);
-          printAlarmTime();
-          break;*/
-        default:
-          state = STATE_NOTIMESET;
-          break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
-          
-      }
-      delay(10);
-    }
-    delay(10);
-    
-    //inputValues = pcf8574.read8();
-    if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobPressed == true  && state != STATE_SETSETTINGMODE){
-      knobPressed = false;
-      Serial.println("released");
-    }
-    //}
-    if(pcf8574.readButton(BUTTON_ENTER) == RELEASED && pcf8574.readButton(BUTTON_UP) == RELEASED && pcf8574.readButton(BUTTON_DOWN) == RELEASED && knobSettingPressed == true){
-      knobSettingPressed = false;
-      Serial.println("released");
-    }
-    //}
-  //Serial.println(state);
+  //Check is alarmbutton presst for stop alarm
+  if(pcf8574.readButton(BUTTON_BELL) == PRESSED && alarmOn == true){
+    alarmOn = 0;
+    rtc_ext.SetGPOState(true);
+    Serial.println("Alarm Stop");
+  }
   
   secondChanged = false;
   minuteChanged = false;
@@ -667,7 +722,7 @@ void printTime(){
     break;
   case STATE_TIMESETMIN:
       //setBackLight(255, 1);
-      tft.fillRect(130,10,50,40,ST77XX_CYAN);
+      tft.fillRect(125,5,50,40,ST77XX_CYAN);
       rtc.getTime("%H:%M").toCharArray(timeString, 7);
       tft.setCursor(60,40);
       tft.print(timeString);
@@ -675,22 +730,26 @@ void printTime(){
     break;
   case STATE_TIMESETHR:
       //setBackLight(255, 1);
-      tft.fillRect(70,10,50,40,ST77XX_CYAN);
+      tft.fillRect(60,5,50,40,ST77XX_CYAN);
       rtc.getTime("%H:%M").toCharArray(timeString, 7);
       tft.setCursor(60,40);
       tft.print(timeString);
       showActualTime();
     break;
-  /*case STATE_ALARMSETMIN:
-      setBackLight(255, 1);
-      tft.fillRect(130,15,50,40,ST77XX_CYAN);
+  case STATE_ALARMSETMIN:
+      //setBackLight(255, 1);
+      tft.fillRect(125,5,50,40,ST77XX_CYAN);
       sprintf(timeString, "%02d:%02d", alarmSetHr, alarmSetMin);
+      tft.setCursor(60,40);
+      tft.print(timeString);
     break;
   case STATE_ALARMSETHR:
-      setBackLight(255, 1);
-      tft.fillRect(70,15,50,40,ST77XX_CYAN);
+      //setBackLight(255, 1);
+      tft.fillRect(60,5,50,40,ST77XX_CYAN);
       sprintf(timeString, "%02d:%02d", alarmSetHr, alarmSetMin);
-    break;*/
+      tft.setCursor(60,40);
+      tft.print(timeString);
+    break;
   default:
     // Statement(s)
     break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
@@ -735,17 +794,68 @@ void printDate(){
   tft.print(dateString);
 }
 
+void printAlarmTime(){ //TODO: Anpassen mit Texten zum ausgeben
+  char alarmString[16] = " ";
+  sprintf(alarmString, "Weckzeit: %02d:%02d", alarmSetHr, alarmSetMin);
+  tft.setFont(&FreeSansBold9pt7b);
+  tft.fillRect(20,119,186,22,ST77XX_WHITE);
+  tft.setCursor(20, 131);
+  if(alarmIsActive){
+    tft.fillRect(20,119,186,22,ST77XX_YELLOW);
+    //tft.print("Weckzeit:");
+    tft.print(alarmString);
+  }else{
+    tft.fillRect(20,119,186,22,ST77XX_WHITE);
+    tft.print("Wecker aus");
+  }
+}
+
 void printTempHum(float temperature, float humidity, uint16_t bgcolor){ //TODO: Anpassen mit Texten zum ausgeben
   tft.setFont(&FreeSansBold18pt7b);
   tft.fillRect(0,115,110,-25, bgcolor);
   tft.setCursor(5, 115);
   tft.print(temperature, 1);
-  tft.print(" °C");
+  tft.print("*C");
   
   tft.fillRect(120,115,115,-25, bgcolor);
   tft.setCursor(120, 115);
   tft.print(humidity, 1);
   tft.print(" %");
+}
+
+void printSetting(int pointPlace){ //TODO: Anpassen mit Texten zum ausgeben
+  if(oldSettingChapter != settingChapter){
+  oldSettingChapter = settingChapter;
+  char displayString[6] = "";
+  //setBackLight(255, 1);
+  tft.fillScreen(ST77XX_YELLOW);
+  tft.setFont(&FreeSansBold18pt7b);
+  tft.setCursor(10, 50);
+  tft.setTextWrap(true);
+  tft.print("Settings");
+  tft.setCursor(10, 90);
+  switch (pointPlace) {
+    case SETTING_CHAPTER_TIME:
+      tft.print("Zeit/Datum"); 
+      break;
+    case SETTING_CHAPTER_ALARMTIME:
+      tft.print("Weckzeit");
+      break;
+    case SETTING_CHAPTER_REFRESHRATE:
+      tft.print("akt. Sensor");
+      break;
+    case SETTING_CHAPTER_DISPLAYBRIGHTNESS:
+      tft.print("Beleuchtung");
+      break;
+    case SETTING_CHAPTER_EXIT:
+      tft.print("Exit");
+      break;
+    default:
+      tft.print("Settings");
+      break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
+    }
+  //Digiclock.setString(displayString);
+  }
 }
 
 void printTimeWarning(){ //TODO: Anpassen mit Texten zum ausgeben
@@ -758,6 +868,33 @@ void printTimeWarning(){ //TODO: Anpassen mit Texten zum ausgeben
   tft.print("Zeit nicht eingestellt!!");
 }
 
+void printTimeOutage(){
+  char buff[20];
+  Serial.print("    From: ");
+	sprintf(buff, "%u%u-%u%u-%u%u %u%u:%u%u:%u%u", timeInternFailDown.dateten, timeInternFailDown.dateone, timeInternFailDown.mthten, timeInternFailDown.mthone, timeInternFailDown.yrten,
+			timeInternFailDown.yrone, timeInternFailDown.hrten, timeInternFailDown.hrone, timeInternFailDown.minten, timeInternFailDown.minone, timeInternFailDown.secten, timeInternFailDown.secone);
+	Serial.println(buff);
+	Serial.print("    To: ");
+	sprintf(buff, "%u%u-%u%u-%u%u %u%u:%u%u:%u%u", timeInternFailUp.dateten, timeInternFailUp.dateone, timeInternFailUp.mthten, timeInternFailUp.mthone, timeInternFailUp.yrten,
+			timeInternFailUp.yrone, timeInternFailUp.hrten, timeInternFailUp.hrone, timeInternFailUp.minten, timeInternFailUp.minone, timeInternFailUp.secten, timeInternFailUp.secone);
+	Serial.println(buff);
+}
+
+void setButtonLeds(){
+  if(state != STATE_TIMESET ){
+    pcf8574.write(BUTTON_LED_MENU, false);
+    pcf8574.write(BUTTON_LED_PLUS, false);
+    pcf8574.write(BUTTON_LED_MINUS, false);
+  }
+  pcf8574.write(BUTTON_LED_BELL, !alarmIsActive);
+}
+
+void setButtonLeds(bool lMenu, bool lBell, bool lPlus, bool lMinus){
+  pcf8574.write(BUTTON_LED_MENU, !lMenu);
+  pcf8574.write(BUTTON_LED_BELL, !lBell);
+  pcf8574.write(BUTTON_LED_PLUS, !lPlus);
+  pcf8574.write(BUTTON_LED_MINUS, !lMinus);
+}
 
 void setBrightness(float dimmingValue){
   uint8_t dimmingValueTFT = 0;
