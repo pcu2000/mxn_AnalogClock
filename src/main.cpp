@@ -285,12 +285,13 @@ void loop() {
 
 
   //delay(10);
-  while (pcf8574.readButton(BUTTON_MENU) == PRESSED && state == STATE_TIMESET) { //state == STATE_TIMESET
+  while (pcf8574.readButton(BUTTON_MENU) == PRESSED && state == STATE_TIMESET) { //wartezeit langes drücken Menu für Settingstart
     SettingWaitCounter++;
     if(SettingWaitCounter >= 100){
       knobSettingPressed = true;
       setButtonLeds();
       //alarmSetWaitCounter = 0;
+      //tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
       printSetting(0);
       break;
     }
@@ -298,9 +299,9 @@ void loop() {
     Serial.println(SettingWaitCounter);
     delay(20);
   }
-  //if(knobSettingPressed){
-    //tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
-  //}
+  if(SettingWaitCounter > 0 && state == STATE_TIMESET){  //Zurücksetzen des roten Wartebalkens
+    tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
+  }
   if(pcf8574.readButton(BUTTON_MENU) == PRESSED && state != STATE_TIMESET){
     knobSettingPressed = true;
       setButtonLeds();
@@ -315,7 +316,7 @@ void loop() {
       //alarmSetWaitCounter = 0;
       alarmIsActive = !alarmIsActive;
       setButtonLeds();
-      tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
+      //tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
       printAlarmTime();
       //printSetting(0);
       break;
@@ -558,13 +559,13 @@ void loop() {
   //inputValues = pcf8574.read8();
   //if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobSettingPressed == true  && state != STATE_SETSETTINGMODE){
   if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobSettingPressed == true){
-    tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
+    //tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
     knobSettingPressed = false;
     Serial.println("released");
   }
   //}
   if(pcf8574.readButton(BUTTON_BELL) == RELEASED && pcf8574.readButton(BUTTON_UP) == RELEASED && pcf8574.readButton(BUTTON_DOWN) == RELEASED && knobPressed == true){
-    tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
+    //tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
     knobPressed = false;
     Serial.println("released");
   }
