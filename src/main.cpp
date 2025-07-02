@@ -21,6 +21,7 @@
 #include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSansBold9pt7b.h>
+#include "rgbLightRing.h"
 
 /*Pin definitions*/
 
@@ -33,19 +34,33 @@ const int redArray = 2;
 const int blueArray = 1;
 const int greenArray = 0;
 
-/*Button*/
-#define BUTTON_MENU 4
+/*Button V2*/
+/*#define BUTTON_MENU 4
 #define BUTTON_BELL 5
 #define BUTTON_UP 6
 #define BUTTON_DOWN 7
 #define PRESSED false
+#define RELEASED true*/
+
+/*Button V3*/
+#define BUTTON_MENU 5
+#define BUTTON_BELL 4
+#define BUTTON_UP 7
+#define BUTTON_DOWN 6
+#define PRESSED false
 #define RELEASED true
 
-/*Button LED's*/
-#define BUTTON_LED_MENU 0
+/*Button LED's V2*/
+/*#define BUTTON_LED_MENU 0
 #define BUTTON_LED_BELL 1
 #define BUTTON_LED_PLUS 2
-#define BUTTON_LED_MINUS 3
+#define BUTTON_LED_MINUS 3*/
+
+/*Button LED's V3*/
+#define BUTTON_LED_MENU 1
+#define BUTTON_LED_BELL 0
+#define BUTTON_LED_PLUS 3
+#define BUTTON_LED_MINUS 2
 
 /*I2C*/
 #define PIN_I2C_SDA 5
@@ -116,10 +131,12 @@ bool minuteChanged = true;
 bool hourChanged = true;
 bool dayChanged = true;
 
+RgbLedRing ledRing(PIN_DO_LED_Data, PIN_DO_LED_Clk, PIN_DO_LED_Clear );  // LED an Pin 8
+
 void exttimeToEsptime();
 void exttimePrintToSerial();
-void showTurningPoint(int speed);
-void showTurningPointWhite(int speed);
+//void showTurningPoint(int speed);
+//void showTurningPointWhite(int speed);
 void showActualTime();
 void printTime();
 void printDate();
@@ -136,12 +153,13 @@ void showBrightness(int brightness);
 
 void setup() {
   /*Init shift register für die ansteuerung der LED's im Ring*/
-  pinMode(PIN_DO_LED_Data, OUTPUT);
+  /*pinMode(PIN_DO_LED_Data, OUTPUT);
   digitalWrite(PIN_DO_LED_Data, LOW);
   pinMode(PIN_DO_LED_Clk, OUTPUT);
   digitalWrite(PIN_DO_LED_Clk, LOW);
   pinMode(PIN_DO_LED_Clear, OUTPUT);
-  digitalWrite(PIN_DO_LED_Clear, HIGH);
+  digitalWrite(PIN_DO_LED_Clear, HIGH);*/
+  ledRing.begin();
   
   /*Init der PWM Signale für Helligkeit LED's und Display */
   ledcSetup(PWM_CHANNEL_BACKLIGHT, PWM_FREQ, PWM_RESOLUTION);
@@ -219,8 +237,9 @@ void setup() {
     printTimeOutage();
   //}
   
-  showTurningPoint(10);
-  showTurningPointWhite(250);
+  ledRing.showTurningPoint(10);
+  ledRing.showTurningPointWhite(100);
+  ledRing.showTurningWorm(100);
   tft.fillScreen(ST77XX_BLACK);
   printTime();
   printDate();
@@ -628,83 +647,6 @@ void exttimePrintToSerial(){
   Serial.println(rtc.getDateTime());
 }
 
-
-/*
-*Zeigt eine Show dar auf dem LED Ring (Punkt der im Kreis dreht)
-*/
-void showTurningPoint(int speed){
-  digitalWrite(PIN_DO_LED_Clear, LOW);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clear, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Data, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clk, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clk, LOW);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Data, LOW);
-  delay(1);
-  for(int x=0; x<=179; x++){
-    digitalWrite(PIN_DO_LED_Clk, HIGH);
-    delay(1);
-    digitalWrite(PIN_DO_LED_Clk, LOW);
-    delay(speed);
-  }
-}
-
-/*
-*Zeigt eine Show dar auf dem LED Ring (Punkt der im Kreis dreht)
-*/
-void showTurningPointWhite(int speed){
-  digitalWrite(PIN_DO_LED_Clear, LOW);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clear, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Data, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clk, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clk, LOW);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Data, LOW);
-  delay(1);
-  for(int x=0; x<=58; x++){
-    digitalWrite(PIN_DO_LED_Clk, HIGH);
-    delay(1);
-    digitalWrite(PIN_DO_LED_Clk, LOW);
-    delay(1);
-  }
-  digitalWrite(PIN_DO_LED_Data, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clk, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clk, LOW);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Data, LOW);
-  delay(1);
-  for(int x=0; x<=58; x++){
-    digitalWrite(PIN_DO_LED_Clk, HIGH);
-    delay(1);
-    digitalWrite(PIN_DO_LED_Clk, LOW);
-    delay(1);
-  }
-  digitalWrite(PIN_DO_LED_Data, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clk, HIGH);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clk, LOW);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Data, LOW);
-  delay(1000);
-  for(int x=0; x<=58; x++){
-    digitalWrite(PIN_DO_LED_Clk, HIGH);
-    delay(1);
-    digitalWrite(PIN_DO_LED_Clk, LOW);
-    delay(speed);
-  }
-  delay(2000);
-}
 
 /*
 *Stellt die aktuelle Zeit auf dem LED Ring dar
