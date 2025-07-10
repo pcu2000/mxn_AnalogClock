@@ -17,6 +17,7 @@ class RgbLedRing {
     void showTurningPoint(int speed);
     void showTurningPointWhite(int speed);
     void showTurningWorm(int speed);
+    void showActualTime(int printHour, int printMinute, int printSecond);
 
   private:
     uint8_t _pinData;   // Pin Data Anschluss
@@ -24,6 +25,10 @@ class RgbLedRing {
     uint8_t _pinClear;  // Pin Clear Anschluss
 
     const uint32_t delaySignalChange = 1; 
+    
+    const int redArray = 2;
+    const int blueArray = 1;
+    const int greenArray = 0;
 
     void setPoint();
     void shiftPoint();

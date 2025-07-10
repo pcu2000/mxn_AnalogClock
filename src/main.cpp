@@ -9,19 +9,21 @@
  */
 
 #include <Arduino.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
-#include <SPI.h>
+#include "definitions.h"
+//#include <Adafruit_GFX.h>
+//#include <Adafruit_ST7789.h>
+//#include <SPI.h>
 #include <ESP32Time.h>
 #include <PCF8574.h>
 #include <DHT20.h>
 #include <RTCC_MCP7940N.h>
 #include <Adafruit_VEML7700.h>
-#include <Fonts/FreeSansBold24pt7b.h>
-#include <Fonts/FreeSansBold18pt7b.h>
-#include <Fonts/FreeSansBold12pt7b.h>
-#include <Fonts/FreeSansBold9pt7b.h>
+//#include <Fonts/FreeSansBold24pt7b.h>
+//#include <Fonts/FreeSansBold18pt7b.h>
+//#include <Fonts/FreeSansBold12pt7b.h>
+//#include <Fonts/FreeSansBold9pt7b.h>
 #include "rgbLightRing.h"
+#include "tftDisplay.h"
 
 /*Pin definitions*/
 
@@ -30,9 +32,6 @@
 #define PIN_DO_LED_Clk 2
 #define PIN_DO_LED_Clear 3
 #define PIN_PWM_LED_Pwm 1
-const int redArray = 2;
-const int blueArray = 1;
-const int greenArray = 0;
 
 /*Button V2*/
 /*#define BUTTON_MENU 4
@@ -94,7 +93,8 @@ bool alarmOn = false;
 #define PIN_SPI_TFT_CS 8
 #define PIN_SPI_TFT_CLK 7
 #define PIN_PWM_TFT_Blight 44
-Adafruit_ST7789 tft = Adafruit_ST7789(PIN_SPI_TFT_CS, PIN_SPI_TFT_DC, PIN_SPI_TFT_MOSI, PIN_SPI_TFT_CLK, PIN_DO_TFT_Reset);
+TftDisplay display(PIN_SPI_TFT_CS, PIN_SPI_TFT_DC, PIN_SPI_TFT_MOSI, PIN_SPI_TFT_CLK, PIN_DO_TFT_Reset);
+//Adafruit_ST7789 tft = Adafruit_ST7789(PIN_SPI_TFT_CS, PIN_SPI_TFT_DC, PIN_SPI_TFT_MOSI, PIN_SPI_TFT_CLK, PIN_DO_TFT_Reset);
 
 /*PWM Config*/
 const int PWM_CHANNEL_LED = 0;
@@ -105,7 +105,7 @@ int brightnessTFT = 20;
 int brightnessLED = 20;
 
 /*States*/
-#define STATE_NOTIMESET 0
+/*#define STATE_NOTIMESET 0
 #define STATE_TIMESET 1
 #define STATE_SETSETTINGMODE 50
 #define STATE_TIMESETMIN 51
@@ -115,7 +115,7 @@ int brightnessLED = 20;
 #define STATE_TIMESETYEAR 55
 #define STATE_ALARMSETMIN 60
 #define STATE_ALARMSETHR 61
-#define STATE_SETBRIGHTNESS 80
+#define STATE_SETBRIGHTNESS 80*/
 
 #define SETTING_CHAPTER_TIME 0
 #define SETTING_CHAPTER_ALARMTIME 1
@@ -135,16 +135,13 @@ RgbLedRing ledRing(PIN_DO_LED_Data, PIN_DO_LED_Clk, PIN_DO_LED_Clear );  // LED 
 
 void exttimeToEsptime();
 void exttimePrintToSerial();
-//void showTurningPoint(int speed);
-//void showTurningPointWhite(int speed);
-void showActualTime();
+//void showActualTime();
 void printTime();
 void printDate();
 void printAlarmTime();
 void printSetting(int pointPlace);
-void printTimeWarning();
 void printTimeOutage();
-void printTempHum(float temperatutre, float humidity, uint16_t bgcolor);
+//void printTempHum(float temperatutre, float humidity, uint16_t bgcolor);
 //void calculateBrightness(uint8_t *calculatetDimmingValue);
 void setButtonLeds();
 void setButtonLeds(bool lMenu, bool lBell, bool lPlus, bool lMinus);
@@ -153,12 +150,6 @@ void showBrightness(int brightness);
 
 void setup() {
   /*Init shift register für die ansteuerung der LED's im Ring*/
-  /*pinMode(PIN_DO_LED_Data, OUTPUT);
-  digitalWrite(PIN_DO_LED_Data, LOW);
-  pinMode(PIN_DO_LED_Clk, OUTPUT);
-  digitalWrite(PIN_DO_LED_Clk, LOW);
-  pinMode(PIN_DO_LED_Clear, OUTPUT);
-  digitalWrite(PIN_DO_LED_Clear, HIGH);*/
   ledRing.begin();
   
   /*Init der PWM Signale für Helligkeit LED's und Display */
@@ -207,18 +198,7 @@ void setup() {
   setButtonLeds(1,1,1,0);
 
   /*Init Display*/
-  tft.init(135, 240);   //Init ST7789 240x135px
-  tft.setSPISpeed(40000000);
-  tft.fillScreen(ST77XX_BLACK);
-  tft.setRotation(3);
-  tft.setFont(&FreeSansBold24pt7b);
-  tft.setTextColor(ST77XX_RED, ST77XX_GREEN);
-  tft.setCursor(50,40);
-  tft.print("maxon");
-  tft.setFont(&FreeSansBold9pt7b);
-  tft.setTextColor(ST77XX_WHITE, ST77XX_GREEN);
-  tft.setCursor(50,70);
-  tft.print("Berufsbildung");
+  display.begin();
   setButtonLeds(1,1,0,0);
 
   delay(500);
@@ -238,12 +218,13 @@ void setup() {
   //}
   
   ledRing.showTurningPoint(10);
-  ledRing.showTurningPointWhite(100);
-  ledRing.showTurningWorm(100);
-  tft.fillScreen(ST77XX_BLACK);
+  ledRing.showTurningPointWhite(10);
+  ledRing.showTurningWorm(10);
+  display.clearScreen(ST77XX_BLACK);
+  //tft.fillScreen(ST77XX_BLACK);
   printTime();
   printDate();
-  printTempHum(0.0, 0.0, ST77XX_BLACK);
+  display.printTempHum(0.0, 0.0, ST77XX_BLACK);
   setButtonLeds(0,0,0,0);
 
 }
@@ -312,16 +293,16 @@ void loop() {
       knobSettingPressed = true;
       setButtonLeds();
       //alarmSetWaitCounter = 0;
-      //tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
+      display.showSettingBar(SettingWaitCounter, ST77XX_BLACK);
       printSetting(0);
       break;
     }
-    tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_RED);
+    display.showSettingBar(SettingWaitCounter, ST77XX_RED);
     Serial.println(SettingWaitCounter);
     delay(20);
   }
   if(SettingWaitCounter > 0 && state == STATE_TIMESET){  //Zurücksetzen des roten Wartebalkens
-    tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
+    display.showSettingBar(SettingWaitCounter, ST77XX_BLACK);
   }
   if(pcf8574.readButton(BUTTON_MENU) == PRESSED && state != STATE_TIMESET){
     knobSettingPressed = true;
@@ -337,25 +318,26 @@ void loop() {
       //alarmSetWaitCounter = 0;
       alarmIsActive = !alarmIsActive;
       setButtonLeds();
-      //tft.fillRect(230,2,5,SettingWaitCounter,ST77XX_WHITE);
+      display.showSettingBar(SettingWaitCounter*2, ST77XX_BLACK);
       printAlarmTime();
       //printSetting(0);
       break;
     }
-    tft.fillRect(230,2,5,SettingWaitCounter*2,ST77XX_RED);
+    //tft.fillRect(230,2,5,SettingWaitCounter*2,ST77XX_RED);
+    display.showSettingBar(SettingWaitCounter*2, ST77XX_RED);
     //Serial.println(SettingWaitCounter);
     delay(20);
   }
   
   if(SettingWaitCounter > 0 ){  //Zurücksetzen des roten Wartebalkens
-    tft.fillRect(230,2,5,SettingWaitCounter*2,ST77XX_WHITE);
+      display.showSettingBar(SettingWaitCounter*2, ST77XX_BLACK);
   }
   
 
   switch (state) {
     case STATE_NOTIMESET:
       if(secondChanged){
-        showActualTime(); 
+        ledRing.showActualTime(rtc.getHour(false), rtc.getMinute(), rtc.getSecond()); 
 
         if((actSecond % 2) == 1){
           setBrightness(20.0);
@@ -364,16 +346,16 @@ void loop() {
           showBrightness(sensorValueBrightness / 10);
         }
         if((actSecond % 10) == 0){
-          printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_BLACK);
+          display.printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_BLACK);
         }
       }
-      if(minuteChanged){printTime(); printTimeWarning();} //TODO: anpassen auf Minuten Changed
+      if(minuteChanged){printTime(); display.printTimeWarning();} //TODO: anpassen auf Minuten Changed
       //if(dayChanged){printDate(state, bufSecond);}
       break;
     case STATE_TIMESET:
       //if(secondChanged){printTime(state, bufSecond);} //TODO: anpassen auf Minuten Changed alarmOn
       if(secondChanged){
-        showActualTime();
+        ledRing.showActualTime(rtc.getHour(false), rtc.getMinute(), rtc.getSecond());
         if(!alarmOn){
           setBrightness(sensorValueBrightness);
         }else{
@@ -385,7 +367,7 @@ void loop() {
         }
         
         if(actSecond % 2 == 0){
-          printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_WHITE);
+          display.printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_BLACK);
         }
         showBrightness(sensorValueBrightness / 10);
 
@@ -479,7 +461,7 @@ void loop() {
         setButtonLeds();
         break;
       case STATE_SETSETTINGMODE:
-        tft.fillScreen(ST77XX_YELLOW);
+        //tft.fillScreen(ST77XX_YELLOW);
         Serial.print("setting Chapter: ");
         Serial.println(settingChapter);
         switch (settingChapter) {
@@ -500,7 +482,7 @@ void loop() {
             }else{
               state = STATE_TIMESET;
             }
-            tft.fillScreen(ST77XX_WHITE);
+            //tft.fillScreen(ST77XX_WHITE);
             printTime();
             printDate();
             //printAlarmTime();
@@ -551,7 +533,7 @@ void loop() {
         state = STATE_TIMESET;
         setButtonLeds();
         setTimeOK = true;
-        tft.fillScreen(ST77XX_WHITE);
+        //tft.fillScreen(ST77XX_WHITE);
         printTime();
         printDate();
         //printAlarmTime();
@@ -563,7 +545,7 @@ void loop() {
         alarmIsActive = 1;
         state = STATE_TIMESET;
         setButtonLeds();
-        tft.fillScreen(ST77XX_WHITE);
+        //tft.fillScreen(ST77XX_WHITE);
         printTime();
         printDate();
         printAlarmTime();
@@ -589,12 +571,14 @@ void loop() {
   //if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobSettingPressed == true  && state != STATE_SETSETTINGMODE){
   if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobSettingPressed == true){
     //tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
+    display.showSettingBar(100, ST77XX_BLACK);
     knobSettingPressed = false;
     Serial.println("released");
   }
   //}
   if(pcf8574.readButton(BUTTON_BELL) == RELEASED && pcf8574.readButton(BUTTON_UP) == RELEASED && pcf8574.readButton(BUTTON_DOWN) == RELEASED && knobPressed == true){
     //tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
+    display.showSettingBar(100, ST77XX_BLACK);
     knobPressed = false;
     Serial.println("released");
   }
@@ -647,186 +631,74 @@ void exttimePrintToSerial(){
   Serial.println(rtc.getDateTime());
 }
 
-
-/*
-*Stellt die aktuelle Zeit auf dem LED Ring dar
-*/
-void showActualTime(){
-  bool timeArray[3][60]{0};
-  int positionSecond = 59 - rtc.getSecond();
-  int positionMinute = 59 - rtc.getMinute();
-  int positionHour = 59 - ((rtc.getHour(false) * 5) + rtc.getMinute() / 12);
-  if(positionHour < 0){positionHour = 59 + positionHour;}  //Korrektur bei 12Uhr
-
-  timeArray[redArray][positionHour] = 1;
-  timeArray[redArray][positionHour+1] = 1;
-  timeArray[blueArray][positionMinute] = 1;
-  timeArray[greenArray][positionSecond] = 1;
-  digitalWrite(PIN_DO_LED_Clear, LOW);
-  delay(1);
-  digitalWrite(PIN_DO_LED_Clear, HIGH);
-  delay(1);
-  for(int x=0; x<3; x++){
-    for(int y=0; y<60; y++){
-      digitalWrite(PIN_DO_LED_Data, timeArray[x][y]);
-      //delayMicroseconds(2);
-      digitalWrite(PIN_DO_LED_Clk, HIGH);
-      //delayMicroseconds(2);
-      digitalWrite(PIN_DO_LED_Clk, LOW);
-      //delayMicroseconds(2);
-    }
-  }
-}
-
-/*
-*Schreibt die aktuelle Zeit und das Datum auf das Display
-*/
-/*void printTime(){
-  char timeString[6] = " ";
-  rtc.getTime("%H:%M").toCharArray(timeString, 7);
-  rtc.getTime("%d.%m.%Y").toCharArray(dateString, 11);
-  tft.fillScreen(ST77XX_BLACK);
-  tft.setFont(&FreeSansBold24pt7b);
-  tft.setTextColor(ST77XX_BLUE, ST77XX_GREEN);
-  tft.setCursor(60,40);
-  tft.print(timeString);
-  tft.setCursor(2,90);
-  tft.print(dateString);
-}*/
-
 /**
  * @brief Schreibt die aktuelle Zeit und das Datum auf das Display
  */
 void printTime(){
   char timeString[6] = " ";
-  char dateString[11] = " ";
-  //tft.fillRect(70,15,120,40,ST77XX_YELLOW);
-  //tft.setCursor(70, 50);
-  tft.setFont(&FreeSansBold24pt7b);
-  tft.setTextWrap(true);
-  //tft.print("22:32");
   switch (state) {
   case STATE_NOTIMESET:
       rtc.getTime("%H:%M").toCharArray(timeString, 7);
-      rtc.getTime("%d.%m.%Y").toCharArray(dateString, 11);  
-      tft.setTextColor(ST77XX_RED, ST77XX_GREEN);
-      tft.fillRect(60,5,120,40,ST77XX_YELLOW);
-      tft.setCursor(60,40);
-      tft.print(timeString);
-      //tft.setCursor(2,90);
-      //tft.print(dateString);
+      display.printTime(timeString, ST77XX_RED, ST77XX_YELLOW);  
     break;
   case STATE_TIMESET:
       rtc.getTime("%H:%M").toCharArray(timeString, 7);
-      rtc.getTime("%d.%m.%Y").toCharArray(dateString, 11);
-      tft.setTextColor(ST77XX_RED, ST77XX_GREEN);
-      tft.fillRect(60,5,120,40,ST77XX_WHITE);
-      tft.setCursor(60,40);
-      tft.print(timeString);
-      //tft.setCursor(2,90);
-      //tft.print(dateString);
+      display.printTime(timeString, ST77XX_RED, ST77XX_BLACK);  
     break;
   case STATE_TIMESETMIN:
       //setBackLight(255, 1);
-      tft.fillRect(125,5,50,40,ST77XX_CYAN);
       rtc.getTime("%H:%M").toCharArray(timeString, 7);
-      tft.setCursor(60,40);
-      tft.print(timeString);
-      showActualTime();
+      display.printTime(timeString, state);
+      ledRing.showActualTime(rtc.getHour(false), rtc.getMinute(), rtc.getSecond());
     break;
   case STATE_TIMESETHR:
-      //setBackLight(255, 1);
-      tft.fillRect(60,5,50,40,ST77XX_CYAN);
       rtc.getTime("%H:%M").toCharArray(timeString, 7);
-      tft.setCursor(60,40);
-      tft.print(timeString);
-      showActualTime();
+      display.printTime(timeString, state);
+      ledRing.showActualTime(rtc.getHour(false), rtc.getMinute(), rtc.getSecond());
     break;
   case STATE_ALARMSETMIN:
-      //setBackLight(255, 1);
-      tft.fillRect(125,5,50,40,ST77XX_CYAN);
       sprintf(timeString, "%02d:%02d", alarmSetHr, alarmSetMin);
-      tft.setCursor(60,40);
-      tft.print(timeString);
+      display.printTime(timeString, state);
     break;
   case STATE_ALARMSETHR:
-      //setBackLight(255, 1);
-      tft.fillRect(60,5,50,40,ST77XX_CYAN);
       sprintf(timeString, "%02d:%02d", alarmSetHr, alarmSetMin);
-      tft.setCursor(60,40);
-      tft.print(timeString);
+      display.printTime(timeString, state);
     break;
   default:
     // Statement(s)
     break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
   }
-
-  //blinkState = changeBlinkstate(blinkState);
-  //tft.print(timeString);
-  //Digiclock.setString(displayString);
 }
 
 void printDate(){
   char dateString[11] = " ";
-
-  //tft.fillRect(60,15,140,40,ST77XX_BLUE);
-  //tft.fillRect(40,64,170,32,ST77XX_YELLOW);
-  
-  tft.setFont(&FreeSansBold18pt7b);
-  tft.setCursor(40, 80);
-  tft.setTextWrap(true);
-  //tft.print("22:32");
+  rtc.getTime("%d.%m.%Y").toCharArray(dateString, 11);
   switch (state) {
   case STATE_NOTIMESET:
-    tft.fillRect(40,81,170,-27,ST77XX_YELLOW);
+    display.printDate(dateString, ST77XX_RED, ST77XX_YELLOW);
     break;
   case STATE_TIMESET:
-    tft.fillRect(40,81,170,-27,ST77XX_WHITE);
+    display.printDate(dateString, ST77XX_RED, ST77XX_BLACK);
     break;
   case STATE_TIMESETDAY:
-    tft.fillRect(40,81,40,-27,ST77XX_CYAN);
+    display.printDate(dateString, state);
     break;
   case STATE_TIMESETMONTH:
-    tft.fillRect(85,81,40,-27,ST77XX_CYAN);
+    display.printDate(dateString, state);
     break;
   case STATE_TIMESETYEAR:
-    tft.fillRect(130,81,80,-27,ST77XX_CYAN);
+    display.printDate(dateString, state);
     break;
   default:
     // Statement(s)
     break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
   }
-  rtc.getTime("%d.%m.%Y").toCharArray(dateString, 11);
-  tft.print(dateString);
 }
 
-void printAlarmTime(){ //TODO: Anpassen mit Texten zum ausgeben
+void printAlarmTime(){
   char alarmString[16] = " ";
   sprintf(alarmString, "Weckzeit: %02d:%02d", alarmSetHr, alarmSetMin);
-  tft.setFont(&FreeSansBold9pt7b);
-  tft.fillRect(20,119,186,22,ST77XX_WHITE);
-  tft.setCursor(20, 131);
-  if(alarmIsActive){
-    tft.fillRect(20,119,186,22,ST77XX_YELLOW);
-    //tft.print("Weckzeit:");
-    tft.print(alarmString);
-  }else{
-    tft.fillRect(20,119,186,22,ST77XX_WHITE);
-    tft.print("Wecker aus");
-  }
-}
-
-void printTempHum(float temperature, float humidity, uint16_t bgcolor){ //TODO: Anpassen mit Texten zum ausgeben
-  tft.setFont(&FreeSansBold18pt7b);
-  tft.fillRect(0,115,110,-25, bgcolor);
-  tft.setCursor(5, 115);
-  tft.print(temperature, 1);
-  tft.print("*C");
-  
-  tft.fillRect(120,115,115,-25, bgcolor);
-  tft.setCursor(120, 115);
-  tft.print(humidity, 1);
-  tft.print(" %");
+  display.printAlarmTime(alarmString, alarmIsActive);
 }
 
 void printSetting(int pointPlace){ //TODO: Anpassen mit Texten zum ausgeben
@@ -834,44 +706,34 @@ void printSetting(int pointPlace){ //TODO: Anpassen mit Texten zum ausgeben
   oldSettingChapter = settingChapter;
   char displayString[6] = "";
   //setBackLight(255, 1);
-  tft.fillScreen(ST77XX_YELLOW);
+  /*tft.fillScreen(ST77XX_YELLOW);
   tft.setFont(&FreeSansBold18pt7b);
   tft.setCursor(10, 50);
   tft.setTextWrap(true);
   tft.print("Settings");
-  tft.setCursor(10, 90);
+  tft.setCursor(10, 90);*/
   switch (pointPlace) {
     case SETTING_CHAPTER_TIME:
-      tft.print("Zeit/Datum"); 
+      //tft.print("Zeit/Datum"); 
       break;
     case SETTING_CHAPTER_ALARMTIME:
-      tft.print("Weckzeit");
+      //tft.print("Weckzeit");
       break;
     case SETTING_CHAPTER_REFRESHRATE:
-      tft.print("akt. Sensor");
+      //tft.print("akt. Sensor");
       break;
     case SETTING_CHAPTER_DISPLAYBRIGHTNESS:
-      tft.print("Beleuchtung");
+      //tft.print("Beleuchtung");
       break;
     case SETTING_CHAPTER_EXIT:
-      tft.print("Exit");
+      //tft.print("Exit");
       break;
     default:
-      tft.print("Settings");
+      //tft.print("Settings");
       break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
     }
   //Digiclock.setString(displayString);
   }
-}
-
-void printTimeWarning(){ //TODO: Anpassen mit Texten zum ausgeben
-  tft.setFont(&FreeSansBold18pt7b);
-  tft.fillRect(0,30,30,-30,ST77XX_YELLOW);
-  tft.setCursor(9, 27);
-  tft.print("!");
-  tft.setFont(&FreeSansBold9pt7b);
-  tft.setCursor(20, 131);
-  tft.print("Zeit nicht eingestellt!!");
 }
 
 void printTimeOutage(){
@@ -926,6 +788,6 @@ void setBrightness(float dimmingValue){
 
 void showBrightness(int brightness){
   if(brightness > 100){brightness = 100;}
-  tft.fillRect(235,30,5, 100-brightness,ST77XX_WHITE);
-  tft.fillRect(235,130,5, -brightness,ST77XX_ORANGE);
+  //tft.fillRect(235,30,5, 100-brightness,ST77XX_WHITE);
+  //tft.fillRect(235,130,5, -brightness,ST77XX_ORANGE);
 }
