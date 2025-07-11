@@ -133,6 +133,36 @@ void TftDisplay::showSettingBar(int waitValue, uint16_t barColor){
     tft.fillRect(230,2,5,waitValue,barColor);
 }
 
+void TftDisplay::showSettingMenu(int menuChapter){
+  tft.fillScreen(ST77XX_YELLOW);
+  tft.setFont(&FreeSansBold18pt7b);
+  tft.setCursor(10, 50);
+  tft.setTextWrap(true);
+  tft.print("Settings");
+  tft.setCursor(10, 90);
+  switch (menuChapter) {
+  case SETTING_CHAPTER_TIME:
+      tft.print("Zeit/Datum"); 
+      break;
+  case SETTING_CHAPTER_ALARMTIME:
+      tft.print("Weckzeit");
+      break;
+  case SETTING_CHAPTER_REFRESHRATE:
+      tft.print("akt. Sensor");
+      break;
+  case SETTING_CHAPTER_DISPLAYBRIGHTNESS:
+      tft.print("Beleuchtung");
+      break;
+  case SETTING_CHAPTER_EXIT:
+      tft.print("Exit");
+      break;
+  default:
+      tft.print("Settings");
+      break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
+
+  }
+}
+
 void TftDisplay::printTimeWarning(){ //TODO: Anpassen mit Texten zum ausgeben
   tft.setFont(&FreeSansBold18pt7b);
   tft.fillRect(0,30,30,-30,ST77XX_YELLOW);

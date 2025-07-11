@@ -115,13 +115,13 @@ int brightnessLED = 20;
 #define STATE_TIMESETYEAR 55
 #define STATE_ALARMSETMIN 60
 #define STATE_ALARMSETHR 61
-#define STATE_SETBRIGHTNESS 80*/
+#define STATE_SETBRIGHTNESS 80
 
 #define SETTING_CHAPTER_TIME 0
 #define SETTING_CHAPTER_ALARMTIME 1
 #define SETTING_CHAPTER_DISPLAYBRIGHTNESS 3
 #define SETTING_CHAPTER_REFRESHRATE 4
-#define SETTING_CHAPTER_EXIT 2
+#define SETTING_CHAPTER_EXIT 2*/
 
 int state = STATE_NOTIMESET;
 uint settingChapter = SETTING_CHAPTER_TIME;
@@ -139,7 +139,7 @@ void exttimePrintToSerial();
 void printTime();
 void printDate();
 void printAlarmTime();
-void printSetting(int pointPlace);
+void printSetting();
 void printTimeOutage();
 //void printTempHum(float temperatutre, float humidity, uint16_t bgcolor);
 //void calculateBrightness(uint8_t *calculatetDimmingValue);
@@ -217,11 +217,11 @@ void setup() {
     printTimeOutage();
   //}
   
+  /*Lightring Show*/
   ledRing.showTurningPoint(10);
   ledRing.showTurningPointWhite(10);
   ledRing.showTurningWorm(10);
   display.clearScreen(ST77XX_BLACK);
-  //tft.fillScreen(ST77XX_BLACK);
   printTime();
   printDate();
   display.printTempHum(0.0, 0.0, ST77XX_BLACK);
@@ -232,25 +232,38 @@ void setup() {
 void loop() {
   static int oldSecond = -1;
   static int oldMinute = -1;
+  static int oldDay = -1;
   static int settingCounter = 0;
-  static bool knobSettingPressed = false;
-  static bool knobPressed = false;
+  static bool knobUpDownPressed = 0;
+  static bool knobMenuPressed = false;
+  static bool knobBellPressed = false;
   static float sensorValueTemperature = 0.0;
   static float sensorValueHuminity = 0.0;
   static float sensorValueBrightness= 0.0;
   static uint8_t brightnessDimmingValue;
   int actSecond = rtc.getSecond();
   int actMinute = rtc.getMinute();
+  int actDay = rtc.getDay();
   int SettingWaitCounter = 0;
   long newTime = 0 ;
   uint8_t inputValues = 0;
   if(oldSecond != actSecond){
     secondChanged = true;
     oldSecond = actSecond;
+  }else{
+    secondChanged = false;
   }
   if(oldMinute != actMinute){
     minuteChanged = true;
     oldMinute = actMinute;
+  }else{
+    minuteChanged = false;
+  }
+  if(oldDay != actDay){
+    dayChanged = true;
+    oldDay = actDay;
+  }else{
+    dayChanged = false;
   }
 
   /*Aktualisierungen Zeitgesteuert*/
@@ -270,69 +283,61 @@ void loop() {
         exttimePrintToSerial();*/
   }
 
-  //Check encoderknob is pressed for settings
-  //if(pcf8574.digitalRead(BUTTON_UP) == PRESSED && knobSettingPressed == false){
-  if(pcf8574.readButton(BUTTON_UP) == PRESSED && knobPressed == false){
-    knobPressed = true;
+    /*Verarbeitung +/- Tastenzustand*/
+  if(pcf8574.readButton(BUTTON_UP) == PRESSED && knobUpDownPressed == false){
+    knobUpDownPressed = true;
     settingCounter++;
     Serial.print("UP_pressed Value: ");
     Serial.println(settingCounter);
   }
-  if(pcf8574.readButton(BUTTON_DOWN) == PRESSED && knobPressed == false){
-    knobPressed = true;
+  if(pcf8574.readButton(BUTTON_DOWN) == PRESSED && knobUpDownPressed == false){
+    knobUpDownPressed = true;
     settingCounter--;
     Serial.print("UP_pressed Value: ");
     Serial.println(settingCounter);
   }
 
-
-  //delay(10);
-  while (pcf8574.readButton(BUTTON_MENU) == PRESSED && state == STATE_TIMESET) { //wartezeit langes drücken Menu für Settingstart
-    SettingWaitCounter++;
-    if(SettingWaitCounter >= 100){
-      knobSettingPressed = true;
-      setButtonLeds();
-      //alarmSetWaitCounter = 0;
+    /*Verarbeitung Menü Tastenzustand*/
+  if(pcf8574.readButton(BUTTON_MENU) == PRESSED && knobMenuPressed == false){
+    while (pcf8574.readButton(BUTTON_MENU) == PRESSED && state == STATE_TIMESET) { //wartezeit langes drücken Menu für Settingstart
+      SettingWaitCounter++;
+      if(SettingWaitCounter >= 100){
+        knobMenuPressed = true;
+        setButtonLeds();
+        display.showSettingBar(SettingWaitCounter, ST77XX_BLACK);
+        printSetting();
+        break;
+      }
+      display.showSettingBar(SettingWaitCounter, ST77XX_RED);
+      Serial.println(SettingWaitCounter);
+      delay(20);
+    }
+    if(SettingWaitCounter > 0 && state == STATE_TIMESET){  //Zurücksetzen des roten Wartebalkens
       display.showSettingBar(SettingWaitCounter, ST77XX_BLACK);
-      printSetting(0);
-      break;
     }
-    display.showSettingBar(SettingWaitCounter, ST77XX_RED);
-    Serial.println(SettingWaitCounter);
-    delay(20);
-  }
-  if(SettingWaitCounter > 0 && state == STATE_TIMESET){  //Zurücksetzen des roten Wartebalkens
-    display.showSettingBar(SettingWaitCounter, ST77XX_BLACK);
-  }
-  if(pcf8574.readButton(BUTTON_MENU) == PRESSED && state != STATE_TIMESET){
-    knobSettingPressed = true;
-      setButtonLeds();
-    delay(10);
-  }
-//}
-  //delay(10);
-  while (pcf8574.readButton(BUTTON_BELL) == PRESSED && knobPressed == false) { //state == STATE_TIMESET
-    SettingWaitCounter++;
-    if(SettingWaitCounter >= 50){
-      knobPressed = true;
-      //alarmSetWaitCounter = 0;
-      alarmIsActive = !alarmIsActive;
-      setButtonLeds();
-      display.showSettingBar(SettingWaitCounter*2, ST77XX_BLACK);
-      printAlarmTime();
-      //printSetting(0);
-      break;
+    if(pcf8574.readButton(BUTTON_MENU) == PRESSED && state != STATE_TIMESET){
+      knobMenuPressed = true;
+        setButtonLeds();
+      delay(10);
     }
-    //tft.fillRect(230,2,5,SettingWaitCounter*2,ST77XX_RED);
-    display.showSettingBar(SettingWaitCounter*2, ST77XX_RED);
-    //Serial.println(SettingWaitCounter);
-    delay(20);
   }
-  
-  if(SettingWaitCounter > 0 ){  //Zurücksetzen des roten Wartebalkens
-      display.showSettingBar(SettingWaitCounter*2, ST77XX_BLACK);
-  }
-  
+
+    /*Verarbeitung Glocke (Alarm) Tastenzustand*/
+  if(pcf8574.readButton(BUTTON_BELL) == PRESSED && knobBellPressed == false){
+    while (pcf8574.readButton(BUTTON_BELL) == PRESSED && knobBellPressed == false) { //state == STATE_TIMESET
+      SettingWaitCounter++;
+      if(SettingWaitCounter >= 50){
+        knobBellPressed = true;
+        alarmIsActive = !alarmIsActive;
+        setButtonLeds();
+        display.showSettingBar(SettingWaitCounter*2, ST77XX_BLACK);
+        printAlarmTime();
+        break;
+      }
+      display.showSettingBar(SettingWaitCounter*2, ST77XX_RED);
+      delay(20);
+    }
+  }  
 
   switch (state) {
     case STATE_NOTIMESET:
@@ -349,11 +354,11 @@ void loop() {
           display.printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_BLACK);
         }
       }
-      if(minuteChanged){printTime(); display.printTimeWarning();} //TODO: anpassen auf Minuten Changed
-      //if(dayChanged){printDate(state, bufSecond);}
+      if(minuteChanged){printTime(); display.printTimeWarning();}
+      if(dayChanged){printDate();}
       break;
+
     case STATE_TIMESET:
-      //if(secondChanged){printTime(state, bufSecond);} //TODO: anpassen auf Minuten Changed alarmOn
       if(secondChanged){
         ledRing.showActualTime(rtc.getHour(false), rtc.getMinute(), rtc.getSecond());
         if(!alarmOn){
@@ -370,22 +375,23 @@ void loop() {
           display.printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_BLACK);
         }
         showBrightness(sensorValueBrightness / 10);
-
       }
       if(minuteChanged){printTime();}
+      if(dayChanged){printDate();}
       break;
+
     case STATE_SETSETTINGMODE:
       if(setTimeOK){
         settingChapter = settingCounter % 3;
       }else{
         settingChapter = SETTING_CHAPTER_TIME;
       }
-      printSetting(settingChapter);
+      printSetting();
       break;
+
     case STATE_TIMESETMIN:
       newTime = rtc.getLocalEpoch() + (settingCounter * 60);
       rtc.setTime(newTime);
-	    //rtc_ext.SetTime(newTime);
       settingCounter = 0;
       printTime();
       break;
@@ -412,8 +418,8 @@ void loop() {
       rtc.setTime(rtc.getSecond(), rtc.getMinute(), rtc.getHour(true), rtc.getDay(), rtc.getMonth()+1, newTime);
       settingCounter = 0;
       printDate();
-      //timeSetOk = true;
       break;
+
     case STATE_ALARMSETMIN:
       if(settingCounter < 0 && alarmSetMin == 0){
         alarmSetMin = 59;
@@ -450,7 +456,7 @@ void loop() {
   }
 
   //cange state for settings
-  if(knobSettingPressed == true){
+  if(knobMenuPressed == true){
     //settingCounter = 0;
     switch (state) {
       case STATE_NOTIMESET:
@@ -461,7 +467,7 @@ void loop() {
         setButtonLeds();
         break;
       case STATE_SETSETTINGMODE:
-        //tft.fillScreen(ST77XX_YELLOW);
+        display.clearScreen(ST77XX_YELLOW);
         Serial.print("setting Chapter: ");
         Serial.println(settingChapter);
         switch (settingChapter) {
@@ -482,19 +488,18 @@ void loop() {
             }else{
               state = STATE_TIMESET;
             }
-            //tft.fillScreen(ST77XX_WHITE);
+            display.clearScreen(ST77XX_BLACK);
             printTime();
             printDate();
-            //printAlarmTime();
+            printAlarmTime();
             break;
           default:
             // Statement(s)
             break;
         }
         oldSettingChapter = -1;
-        
-        //state = STATE_TIMESETMIN;
         break;
+
       case STATE_TIMESETMIN:
         state = STATE_TIMESETHR;
         break;
@@ -508,14 +513,7 @@ void loop() {
       case STATE_TIMESETMONTH:
         state = STATE_TIMESETYEAR;
         break;
-      case STATE_TIMESETYEAR:
-
-      Serial.print(rtc.getDay());
-      Serial.print(" - ");
-      Serial.print(rtc.getMonth());
-      Serial.print(" - ");
-      Serial.println(rtc.getYear());
-      
+      case STATE_TIMESETYEAR:      
         timeIntern.secone = rtc.getSecond() % 10;
         timeIntern.secten = rtc.getSecond() / 10;
         timeIntern.minone = rtc.getMinute() % 10;
@@ -533,10 +531,10 @@ void loop() {
         state = STATE_TIMESET;
         setButtonLeds();
         setTimeOK = true;
-        //tft.fillScreen(ST77XX_WHITE);
+        display.clearScreen(ST77XX_BLACK);
         printTime();
         printDate();
-        //printAlarmTime();
+        printAlarmTime();
         break;
       case STATE_ALARMSETMIN:
         state = STATE_ALARMSETHR;
@@ -545,7 +543,7 @@ void loop() {
         alarmIsActive = 1;
         state = STATE_TIMESET;
         setButtonLeds();
-        //tft.fillScreen(ST77XX_WHITE);
+        display.clearScreen(ST77XX_BLACK);
         printTime();
         printDate();
         printAlarmTime();
@@ -567,30 +565,27 @@ void loop() {
   }
   delay(10);
   
-  //inputValues = pcf8574.read8();
-  //if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobSettingPressed == true  && state != STATE_SETSETTINGMODE){
-  if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobSettingPressed == true){
-    //tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
-    display.showSettingBar(100, ST77XX_BLACK);
-    knobSettingPressed = false;
-    Serial.println("released");
+  if(pcf8574.readButton(BUTTON_MENU) == RELEASED && knobMenuPressed == true){
+    display.showSettingBar(100, ST77XX_BLACK); //löscht wartebalken
+    knobMenuPressed = false;
+    Serial.println("Menu released");
   }
-  //}
-  if(pcf8574.readButton(BUTTON_BELL) == RELEASED && pcf8574.readButton(BUTTON_UP) == RELEASED && pcf8574.readButton(BUTTON_DOWN) == RELEASED && knobPressed == true){
-    //tft.fillRect(230,2,5,100,ST77XX_WHITE); //löscht wartebalken
-    display.showSettingBar(100, ST77XX_BLACK);
-    knobPressed = false;
-    Serial.println("released");
+  if(pcf8574.readButton(BUTTON_BELL) == RELEASED && knobBellPressed == true){
+    display.showSettingBar(100, ST77XX_BLACK); //löscht wartebalken
+    knobBellPressed = false;
+    Serial.println("Bell released");
   }
-  //}
-//Serial.println(state);
+
+  if(pcf8574.readButton(BUTTON_UP) == RELEASED && pcf8574.readButton(BUTTON_DOWN) == RELEASED && knobUpDownPressed == true){
+    knobUpDownPressed = false;
+    Serial.println("Up/Down released");
+  }
 
   //Check is time for alarm and alarm activated
   if(alarmSetMin == rtc.getMinute() && alarmSetHr == rtc.getHour(true) && alarmIsActive && state == STATE_TIMESET && alarmOn == false){
     alarmOn = true;
     rtc_ext.SetGPOState(false);
     Serial.println("Alarm Start");
-    //alarmIsActive = 0;
   }
 
   //Check is alarmbutton presst for stop alarm
@@ -600,8 +595,8 @@ void loop() {
     Serial.println("Alarm Stop");
   }
   
-  secondChanged = false;
-  minuteChanged = false;
+  //secondChanged = false;
+  //minuteChanged = false;
   delay(10);
 }
 
@@ -701,38 +696,10 @@ void printAlarmTime(){
   display.printAlarmTime(alarmString, alarmIsActive);
 }
 
-void printSetting(int pointPlace){ //TODO: Anpassen mit Texten zum ausgeben
+void printSetting(){ //TODO: Anpassen mit Texten zum ausgeben
   if(oldSettingChapter != settingChapter){
-  oldSettingChapter = settingChapter;
-  char displayString[6] = "";
-  //setBackLight(255, 1);
-  /*tft.fillScreen(ST77XX_YELLOW);
-  tft.setFont(&FreeSansBold18pt7b);
-  tft.setCursor(10, 50);
-  tft.setTextWrap(true);
-  tft.print("Settings");
-  tft.setCursor(10, 90);*/
-  switch (pointPlace) {
-    case SETTING_CHAPTER_TIME:
-      //tft.print("Zeit/Datum"); 
-      break;
-    case SETTING_CHAPTER_ALARMTIME:
-      //tft.print("Weckzeit");
-      break;
-    case SETTING_CHAPTER_REFRESHRATE:
-      //tft.print("akt. Sensor");
-      break;
-    case SETTING_CHAPTER_DISPLAYBRIGHTNESS:
-      //tft.print("Beleuchtung");
-      break;
-    case SETTING_CHAPTER_EXIT:
-      //tft.print("Exit");
-      break;
-    default:
-      //tft.print("Settings");
-      break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
-    }
-  //Digiclock.setString(displayString);
+    oldSettingChapter = settingChapter;
+    display.showSettingMenu(settingChapter);
   }
 }
 

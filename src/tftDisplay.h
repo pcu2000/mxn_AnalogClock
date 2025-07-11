@@ -32,6 +32,7 @@ class TftDisplay {
     void printAlarmTime(const char* alarmString, bool alarmActive);
     void printTempHum(float temperature, float humidity, uint16_t bgColor);
     void showSettingBar(int waitValue, uint16_t barColor);
+    void showSettingMenu(int menuChapter);
     void printTimeWarning();
 
 
