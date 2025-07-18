@@ -10,18 +10,12 @@
 
 #include <Arduino.h>
 #include "definitions.h"
-//#include <Adafruit_GFX.h>
-//#include <Adafruit_ST7789.h>
 //#include <SPI.h>
 #include <ESP32Time.h>
 #include <PCF8574.h>
 #include <DHT20.h>
 #include <RTCC_MCP7940N.h>
 #include <Adafruit_VEML7700.h>
-//#include <Fonts/FreeSansBold24pt7b.h>
-//#include <Fonts/FreeSansBold18pt7b.h>
-//#include <Fonts/FreeSansBold12pt7b.h>
-//#include <Fonts/FreeSansBold9pt7b.h>
 #include "rgbLightRing.h"
 #include "tftDisplay.h"
 
@@ -146,7 +140,7 @@ void printTimeOutage();
 void setButtonLeds();
 void setButtonLeds(bool lMenu, bool lBell, bool lPlus, bool lMinus);
 void setBrightness(float dimmingValue);
-void showBrightness(int brightness);
+//void showBrightness(int brightness);
 
 void setup() {
   /*Init shift register für die ansteuerung der LED's im Ring*/
@@ -270,7 +264,7 @@ void loop() {
   if(secondChanged & (actSecond % 1 == 0)){
         sensorValueBrightness = veml.readLux();
   }
-  if(secondChanged & (actSecond % 2 == 0)){
+  if(secondChanged & (actSecond % 2 == 0)){ //Sensor darf nicht schneller als alle 2s ausgelesen werden.
         DHT.read();
         sensorValueTemperature = DHT.getTemperature();
         sensorValueHuminity = DHT.getHumidity();
@@ -337,6 +331,9 @@ void loop() {
       display.showSettingBar(SettingWaitCounter*2, ST77XX_RED);
       delay(20);
     }
+    if(SettingWaitCounter > 0){  //Zurücksetzen des roten Wartebalkens
+      display.showSettingBar(SettingWaitCounter*2, ST77XX_BLACK);
+    }
   }  
 
   switch (state) {
@@ -346,9 +343,11 @@ void loop() {
 
         if((actSecond % 2) == 1){
           setBrightness(20.0);
+          setButtonLeds(1,0,0,0);
         }else{
           setBrightness(sensorValueBrightness);
-          showBrightness(sensorValueBrightness / 10);
+          setButtonLeds(0,0,0,0);
+          display.showBrightness(sensorValueBrightness / 10);
         }
         if((actSecond % 10) == 0){
           display.printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_BLACK);
@@ -374,7 +373,7 @@ void loop() {
         if(actSecond % 2 == 0){
           display.printTempHum(sensorValueTemperature, sensorValueHuminity, ST77XX_BLACK);
         }
-        showBrightness(sensorValueBrightness / 10);
+        display.showBrightness(sensorValueBrightness / 10);
       }
       if(minuteChanged){printTime();}
       if(dayChanged){printDate();}
@@ -751,10 +750,4 @@ void setBrightness(float dimmingValue){
         } 
   ledcWrite(PWM_CHANNEL_BACKLIGHT, dimmingValueTFT);
   ledcWrite(PWM_CHANNEL_LED, dimmingValueLED);
-}
-
-void showBrightness(int brightness){
-  if(brightness > 100){brightness = 100;}
-  //tft.fillRect(235,30,5, 100-brightness,ST77XX_WHITE);
-  //tft.fillRect(235,130,5, -brightness,ST77XX_ORANGE);
 }

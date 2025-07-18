@@ -34,7 +34,7 @@ void TftDisplay::printTime(const char* timeString, uint16_t txtColor, uint16_t b
     tft.setFont(&FreeSansBold24pt7b);
     tft.setTextColor(txtColor, bgColor);
     tft.fillRect(60,5,120,40,bgColor);
-    tft.setCursor(60,40);
+    tft.setCursor(62,40);
     tft.print(timeString);
 }
 
@@ -62,15 +62,15 @@ void TftDisplay::printTime(const char* timeString, int state){
         break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
     }
     tft.setTextColor(ST77XX_RED, ST77XX_BLACK);
-    tft.setCursor(60,40);
+    tft.setCursor(62,40);
     tft.print(timeString);
 }
 
 void TftDisplay::printDate(const char* dateString, uint16_t txtColor, uint16_t bgColor){
     tft.setFont(&FreeSansBold18pt7b);
     tft.setTextColor(txtColor, bgColor);
-    tft.fillRect(40,81,170,-27,bgColor);
-    tft.setCursor(40, 80);
+    tft.fillRect(38,75,173,-29,bgColor);
+    tft.setCursor(40, 73);
     tft.print(dateString);
 }
 
@@ -78,26 +78,26 @@ void TftDisplay::printDate(const char* dateString, int state){
     tft.setFont(&FreeSansBold18pt7b);
     switch (state) {
         case STATE_NOTIMESET:
-            tft.fillRect(40,81,170,-27,ST77XX_YELLOW);
+            tft.fillRect(38,75,173,-29,ST77XX_YELLOW);
             break;
         case STATE_TIMESET:
-            tft.fillRect(40,81,170,-27,ST77XX_WHITE);
+            tft.fillRect(38,75,170,-29,ST77XX_WHITE);
             break;
         case STATE_TIMESETDAY:
-            tft.fillRect(40,81,40,-27,ST77XX_CYAN);
+            tft.fillRect(38,75,40,-29,ST77XX_CYAN);
             break;
         case STATE_TIMESETMONTH:
-            tft.fillRect(85,81,40,-27,ST77XX_CYAN);
+            tft.fillRect(85,75,40,-29,ST77XX_CYAN);
             break;
         case STATE_TIMESETYEAR:
-            tft.fillRect(130,81,80,-27,ST77XX_CYAN);
+            tft.fillRect(130,75,80,-29,ST77XX_CYAN);
             break;
         default:
             // Statement(s)
             break; // Wird nicht benötigt, wenn Statement(s) vorhanden sind
         }
     tft.setTextColor(ST77XX_RED, ST77XX_BLACK);
-    tft.setCursor(40, 80);
+    tft.setCursor(40, 73);
     tft.print(dateString);
 }
 
@@ -107,10 +107,10 @@ void TftDisplay::printAlarmTime(const char* alarmString, bool alarmActive){
     tft.fillRect(20,119,186,22,ST77XX_BLACK);
     tft.setCursor(20, 131);
   if(alarmActive){
-    tft.fillRect(20,119,186,22,ST77XX_YELLOW);
+    tft.fillRect(18,117,190,24,ST77XX_YELLOW);
     tft.print(alarmString);
   }else{
-    tft.fillRect(20,119,186,22,ST77XX_BLACK);
+    tft.fillRect(18,117,190,24,ST77XX_BLACK);
     tft.print("Wecker aus");
   }
 }
@@ -118,15 +118,25 @@ void TftDisplay::printAlarmTime(const char* alarmString, bool alarmActive){
 void TftDisplay::printTempHum(float temperature, float humidity, uint16_t bgColor){ //TODO: Anpassen mit Texten zum ausgeben
   tft.setFont(&FreeSansBold18pt7b);
   tft.setTextColor(ST77XX_RED, ST77XX_BLACK);
-  tft.fillRect(0,115,110,-25, bgColor);
-  tft.setCursor(5, 115);
+  tft.fillRect(0,108,110,-29, bgColor);
+  tft.setCursor(5, 106);
   tft.print(temperature, 1);
-  tft.print("*C");
+  tft.setCursor(90, 106);
+  tft.print("C");
   
-  tft.fillRect(120,115,115,-25, bgColor);
-  tft.setCursor(120, 115);
+  tft.fillRect(120,108,115,-29, bgColor);
+  tft.setCursor(120, 106);
   tft.print(humidity, 1);
   tft.print(" %");
+
+  tft.fillCircle(82, 85, 6, ST77XX_RED);
+  tft.fillCircle(82, 85, 3, ST77XX_BLACK);
+}
+
+void TftDisplay::showBrightness(int brightness){
+  if(brightness > 100){brightness = 100;}
+  tft.fillRect(235,30,5, 100-brightness,ST77XX_WHITE);
+  tft.fillRect(235,130,5, -brightness,ST77XX_ORANGE);
 }
 
 void TftDisplay::showSettingBar(int waitValue, uint16_t barColor){
@@ -165,11 +175,14 @@ void TftDisplay::showSettingMenu(int menuChapter){
 
 void TftDisplay::printTimeWarning(){ //TODO: Anpassen mit Texten zum ausgeben
   tft.setFont(&FreeSansBold18pt7b);
-  tft.fillRect(0,30,30,-30,ST77XX_YELLOW);
+  //tft.fillRect(0,30,30,-30,ST77XX_YELLOW);
+  tft.fillRoundRect(0,0,30,30,5,ST77XX_YELLOW);
   tft.setTextColor(ST77XX_RED, ST77XX_YELLOW);
   tft.setCursor(9, 27);
   tft.print("!");
+  
+  tft.fillRoundRect(18,116,194,20,5,ST77XX_YELLOW);
   tft.setFont(&FreeSansBold9pt7b);
-  tft.setCursor(20, 131);
+  tft.setCursor(20, 130);
   tft.print("Zeit nicht eingestellt!!");
 }
